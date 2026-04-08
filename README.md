@@ -75,7 +75,7 @@ These are part of the competition rules, not just recommendations:
 
 - **Single source file only:** exactly one of `agent.js` or `agent.ts` at repository root
 - **No external runtime dependencies:** Node.js standard library only
-- **Max source file size:** `5 MB`
+- **Max source file size:** `1 MB`
 - **No network access**
 - **No reading files outside the submission root**
 - **No background daemons, subprocesses, worker pools, or child processes**
