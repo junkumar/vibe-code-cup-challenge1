@@ -51,7 +51,28 @@ or
 agent.ts
 ```
 
-Only one of these may be present. No extra source tree is required.
+Only one of these may be present. No extra source tree is required. A root-level `submission-report.md` is also required for transparency, but it is treated as documentation rather than source code.
+
+
+## Required submission documentation
+
+Each submission must also include a small root-level markdown file:
+
+```text
+submission-report.md
+```
+
+This file must include, at minimum:
+1. **All prompts given** during development of the submission
+2. **All tools used** during development of the submission
+
+Recommended structure:
+- model(s) / system(s) used
+- chronological prompt log
+- tool list with short description of how each tool was used
+- brief note on any hand edits after AI generation
+
+This file is required for review transparency, but it does **not** count as a second source file. The single-source-file rule still applies to executable code only.
 
 ## Runtime contract
 
@@ -143,7 +164,8 @@ That is the starting point challengers will fork and improve.
 
 ```text
 agent.js or agent.ts
+submission-report.md
 README.md
 ```
 
-No extra source files should be required by the judge.
+No extra source files should be required by the judge. `submission-report.md` is mandatory documentation.
