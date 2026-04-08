@@ -39,17 +39,29 @@ Only one move should be printed per turn.
 
 ## Submission structure
 
-Your submission repo must contain a **single runnable TypeScript entry file** at the root:
+Your submission repo must contain **exactly one runnable source file** at the root:
+
+```text
+agent.js
+```
+
+or
 
 ```text
 agent.ts
 ```
 
-The file must be directly runnable by the tournament harness. No extra source tree is required.
+Only one of these may be present. No extra source tree is required.
 
 ## Runtime contract
 
-Submissions are executed with:
+Submissions are executed with one of:
+
+```bash
+node agent.js < input.fen
+```
+
+or
 
 ```bash
 node agent.ts < input.fen
@@ -61,10 +73,9 @@ Assume a pinned Node.js runtime supplied by the organizer. Do not assume `tsx`, 
 
 These are part of the competition rules, not just recommendations:
 
-- **Single entrypoint:** `agent.ts` at repository root
+- **Single source file only:** exactly one of `agent.js` or `agent.ts` at repository root
 - **No external runtime dependencies:** Node.js standard library only
-- **Max zipped submission size:** `10 MB`
-- **Max uncompressed submission size:** `25 MB`
+- **Max source file size:** `5 MB`
 - **No network access**
 - **No reading files outside the submission root**
 - **No background daemons, subprocesses, worker pools, or child processes**
@@ -120,7 +131,7 @@ The actual unfair-advantage risk is different: competitors can gain leverage by 
 
 ## Sample agent
 
-This repo includes a sample TypeScript agent that:
+This repo includes a sample JavaScript agent that:
 1. parses the FEN position
 2. generates legal moves
 3. picks one move deterministically
@@ -131,8 +142,8 @@ That is the starting point challengers will fork and improve.
 ## Expected repo layout
 
 ```text
-agent.ts
+agent.js or agent.ts
 README.md
 ```
 
-Optional local files such as `package.json` or `tsconfig.json` may exist, but the judge should only require the runnable entry point.
+No extra source files should be required by the judge.
