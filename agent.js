@@ -1,32 +1,45 @@
 import { readFileSync } from 'node:fs';
 
+// Files on a chess board are the columns a through h. This string lets us
+// convert back and forth between algebraic squares like "e4" and numeric
+// indexes in the 64-element board array used below.
 const FILES = 'abcdefgh';
 
+// Convert a square such as "e4" into an array index from 0 to 63.
+// Index 0 is a8, index 7 is h8, and index 63 is h1.
 function squareToIndex(square) {
   const file = FILES.indexOf(square[0]);
   const rank = 8 - Number(square[1]);
   return rank * 8 + file;
 }
 
+// Convert a 0..63 board index back into a UCI/algebraic square name.
 function indexToSquare(index) {
   const rank = Math.floor(index / 8);
   const file = index % 8;
   return `${FILES[file]}${8 - rank}`;
 }
 
+// Pieces are stored as FEN characters: uppercase means white, lowercase means
+// black, and "." means the square is empty.
 function colorOf(piece) {
   if (!piece || piece === '.') return null;
   return piece === piece.toUpperCase() ? 'w' : 'b';
 }
 
+// Convenience helper for toggling the side to move after a move is applied.
 function opposite(side) {
   return side === 'w' ? 'b' : 'w';
 }
 
+// The board is a flat array, so a shallow copy is enough when making a new
+// position to test a candidate move.
 function cloneBoard(board) {
   return board.slice();
 }
 
+// Parse the FEN string supplied on stdin into the position object used by the
+// rest of this file. Only the fields needed to generate legal moves are stored.
 function parseFen(fen) {
   const [placement, side, castling, ep, halfmove, fullmove] = fen.trim().split(/\s+/);
   const board = [];
@@ -46,6 +59,8 @@ function parseFen(fen) {
   };
 }
 
+// Castling rights sometimes become an empty string after a move removes the
+// final available right. These helpers keep the conventional "-" placeholder.
 function stripCastling(castling) {
   return castling.replace(/-/g, '');
 }
@@ -55,13 +70,21 @@ function normalizeCastling(castling) {
   return out || '-';
 }
 
+// Board coordinates are represented as row/column pairs while generating
+// moves. This helper prevents accidental wraparound at the board edges.
 function inBounds(r, c) {
   return r >= 0 && r < 8 && c >= 0 && c < 8;
 }
 
+// Return true if the square at sqIdx is attacked by the given side. This is
+// used for check detection and to make sure castling does not pass through
+// check. It checks each piece family using the way that piece attacks.
 function isSquareAttacked(pos, sqIdx, by) {
   const tr = Math.floor(sqIdx / 8);
   const tc = sqIdx % 8;
+
+  // Pawns attack diagonally forward from their own perspective, so from the
+  // target square we look one rank "behind" the attacking pawns.
   const pawnRow = by === 'w' ? tr + 1 : tr - 1;
   for (const dc of [-1, 1]) {
     const c = tc + dc;
@@ -69,12 +92,16 @@ function isSquareAttacked(pos, sqIdx, by) {
     const p = pos.board[pawnRow * 8 + c];
     if (p !== '.' && colorOf(p) === by && p.toLowerCase() === 'p') return true;
   }
+
+  // Knights attack in L-shapes and can jump over pieces.
   for (const [dr, dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]) {
     const r = tr + dr, c = tc + dc;
     if (!inBounds(r, c)) continue;
     const p = pos.board[r * 8 + c];
     if (p !== '.' && colorOf(p) === by && p.toLowerCase() === 'n') return true;
   }
+
+  // Bishops and queens attack along diagonals until a piece blocks the ray.
   for (const [dr, dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) {
     let r = tr + dr, c = tc + dc;
     while (inBounds(r, c)) {
@@ -86,6 +113,8 @@ function isSquareAttacked(pos, sqIdx, by) {
       r += dr; c += dc;
     }
   }
+
+  // Rooks and queens attack along ranks/files until a piece blocks the ray.
   for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
     let r = tr + dr, c = tc + dc;
     while (inBounds(r, c)) {
@@ -97,6 +126,8 @@ function isSquareAttacked(pos, sqIdx, by) {
       r += dr; c += dc;
     }
   }
+
+  // Kings attack the eight neighboring squares.
   for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
     if (dr === 0 && dc === 0) continue;
     const r = tr + dr, c = tc + dc;
@@ -107,16 +138,22 @@ function isSquareAttacked(pos, sqIdx, by) {
   return false;
 }
 
+// A side is in check if its king exists and the opponent attacks that square.
+// If no king is found, treat the position as invalid/check so it is rejected.
 function isKingInCheck(pos, side) {
   const kingIdx = pos.board.findIndex((p) => p !== '.' && colorOf(p) === side && p.toLowerCase() === 'k');
   if (kingIdx < 0) return true;
   return isSquareAttacked(pos, kingIdx, opposite(side));
 }
 
+// Small helper used by castling validation.
 function hasPiece(pos, sq, piece) {
   return pos.board[squareToIndex(sq)] === piece;
 }
 
+// Castling is legal only when the right exists, the king/rook are still on
+// their starting squares, the path is empty, the king is not currently in
+// check, and the king does not cross or land on an attacked square.
 function canCastle(pos, side, kind) {
   const rights = stripCastling(pos.castling);
   const kingSq = side === 'w' ? 'e1' : 'e8';
@@ -142,6 +179,9 @@ function canCastle(pos, side, kind) {
   return true;
 }
 
+// Apply a move to produce a new position. This function handles all state that
+// affects future move generation: captures, promotion, en passant, castling,
+// halfmove/fullmove counters, castling rights, and side-to-move changes.
 function applyMove(pos, move) {
   const next = {
     board: cloneBoard(pos.board),
@@ -160,11 +200,13 @@ function applyMove(pos, move) {
 
   next.board[from] = '.';
 
+  // En passant captures a pawn that is not on the destination square.
   if (lower === 'p' && move.to === pos.enPassant && target === '.') {
     const captureIdx = to + (pos.side === 'w' ? 8 : -8);
     next.board[captureIdx] = '.';
   }
 
+  // Castling moves the rook in addition to the king.
   if (lower === 'k' && Math.abs(to - from) === 2) {
     if (move.to === 'g1') {
       next.board[squareToIndex('f1')] = next.board[squareToIndex('h1')];
@@ -181,15 +223,20 @@ function applyMove(pos, move) {
     }
   }
 
+  // Promotions replace the pawn with the selected piece. The generator uses
+  // lowercase promotion letters because UCI writes promotions as e7e8q.
   next.board[to] = move.promotion
     ? (pos.side === 'w' ? move.promotion.toUpperCase() : move.promotion.toLowerCase())
     : piece;
 
+  // Reset the halfmove clock after pawn moves or captures, and record the en
+  // passant target square after a two-square pawn push.
   if (lower === 'p' || target !== '.' || (lower === 'p' && move.to === pos.enPassant)) next.halfmove = 0;
   if (lower === 'p' && Math.abs(to - from) === 16) {
     next.enPassant = indexToSquare((from + to) / 2);
   }
 
+  // Moving a king or rook removes the matching castling rights.
   if (lower === 'k') {
     next.castling = next.castling.replace(pos.side === 'w' ? /[KQ]/g : /[kq]/g, '');
   }
@@ -199,6 +246,7 @@ function applyMove(pos, move) {
     if (from === squareToIndex('a8')) next.castling = next.castling.replace('q', '');
     if (from === squareToIndex('h8')) next.castling = next.castling.replace('k', '');
   }
+  // Capturing a rook on its starting square also removes that side's right.
   if (target.toLowerCase() === 'r') {
     if (to === squareToIndex('a1')) next.castling = next.castling.replace('Q', '');
     if (to === squareToIndex('h1')) next.castling = next.castling.replace('K', '');
@@ -210,6 +258,9 @@ function applyMove(pos, move) {
   return next;
 }
 
+// Generate moves that follow each piece's movement rules. These are called
+// "pseudo-legal" because some of them may leave the moving side in check; the
+// legalMoves function below filters those out by applying each move.
 function pseudoLegalMoves(pos) {
   const moves = [];
   const side = pos.side;
@@ -221,6 +272,8 @@ function pseudoLegalMoves(pos) {
     const r = Math.floor(i / 8), c = i % 8;
     const lower = piece.toLowerCase();
 
+    // Pawns move forward, capture diagonally, can advance two squares from the
+    // starting rank, can promote, and can capture en passant.
     if (lower === 'p') {
       const dir = side === 'w' ? -1 : 1;
       const startRank = side === 'w' ? 6 : 1;
@@ -247,6 +300,8 @@ function pseudoLegalMoves(pos) {
       continue;
     }
 
+    // Sliding pieces reuse the same ray-walking helper. They keep moving in a
+    // direction until they leave the board or run into a blocker.
     const addSlides = (dirs) => {
       for (const [dr, dc] of dirs) {
         let nr = r + dr, nc = c + dc;
@@ -263,6 +318,7 @@ function pseudoLegalMoves(pos) {
       }
     };
 
+    // Knights jump to their eight possible L-shaped target squares.
     if (lower === 'n') {
       for (const [dr, dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]) {
         const nr = r + dr, nc = c + dc;
@@ -274,6 +330,7 @@ function pseudoLegalMoves(pos) {
     else if (lower === 'r') addSlides([[-1,0],[1,0],[0,-1],[0,1]]);
     else if (lower === 'q') addSlides([[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]]);
     else if (lower === 'k') {
+      // Kings move one square in any direction, plus optional castling moves.
       for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
         if (dr === 0 && dc === 0) continue;
         const nr = r + dr, nc = c + dc;
@@ -289,14 +346,19 @@ function pseudoLegalMoves(pos) {
   return moves;
 }
 
+// Keep only moves that do not leave the moving side's own king in check.
 function legalMoves(pos) {
   return pseudoLegalMoves(pos).filter((m) => !isKingInCheck(applyMove(pos, m), pos.side));
 }
 
+// UCI move format is source square + target square + optional promotion piece.
+// Examples: e2e4, g1f3, e7e8q.
 function moveToUci(move) {
   return `${move.from}${move.to}${move.promotion || ''}`;
 }
 
+// Deterministic hash used to pick a move without randomness. Determinism matters
+// because the same FEN input must always produce the same output.
 function hashString(input) {
   let hash = 2166136261;
   for (let i = 0; i < input.length; i++) {
@@ -306,6 +368,9 @@ function hashString(input) {
   return hash >>> 0;
 }
 
+// This sample agent is intentionally simple: generate every legal move, derive
+// a stable key from the position, and choose one legal move based on the hash.
+// Participants can replace this with stronger evaluation/search logic.
 function pickMove(pos) {
   const legal = legalMoves(pos);
   if (!legal.length) return null;
@@ -314,6 +379,8 @@ function pickMove(pos) {
   return legal[start];
 }
 
+// The judge sends exactly one FEN on stdin. The agent prints exactly one UCI
+// move on stdout. If there are no legal moves, print 0000 as a safe placeholder.
 const fen = readFileSync(0, 'utf8').trim();
 const pos = parseFen(fen);
 const move = pickMove(pos);

@@ -43,19 +43,13 @@ Only one move should be printed per turn.
 
 ## Submission structure
 
-Your submission repo must contain **exactly one runnable source file** at the root:
+Your submission repo must contain **exactly one runnable JavaScript source file** at the root:
 
 ```text
 agent.js
 ```
 
-or
-
-```text
-agent.ts
-```
-
-Only one of these may be present. No extra source tree is required. A root-level `submission-report.md` is also required for transparency, but it is treated as documentation rather than source code.
+No extra source tree is required. A root-level `submission-report.md` is also required for transparency, but it is treated as documentation rather than source code.
 
 
 ## Required submission documentation
@@ -72,33 +66,28 @@ This file must include, at minimum:
 
 Recommended structure:
 - model(s) / system(s) used
+- short strategy summary
 - chronological prompt log
 - tool list with short description of how each tool was used
-- brief note on any hand edits after AI generation
+- one-line Yes/No rules compliance checklist
 
 This file is required for review transparency, but it does **not** count as a second source file. The single-source-file rule still applies to executable code only.
 
 ## Runtime contract
 
-Submissions are executed with one of:
+Submissions are executed with:
 
 ```bash
 node agent.js < input.fen
 ```
 
-or
-
-```bash
-node agent.ts < input.fen
-```
-
-Assume a pinned Node.js runtime supplied by the organizer. Do not assume `tsx`, `ts-node`, `npm install`, or any network/package download step is available during judging.
+Assume a pinned Node.js runtime supplied by the organizer. Do not assume `npm install` or any network/package download step is available during judging.
 
 ## Hard submission constraints
 
 These are part of the competition rules, not just recommendations:
 
-- **Single source file only:** exactly one of `agent.js` or `agent.ts` at repository root
+- **Single source file only:** exactly one `agent.js` file at repository root
 - **No external runtime dependencies:** Node.js standard library only
 - **Max source file size:** `1 MB`
 - **No network access**
@@ -167,7 +156,7 @@ That is the starting point challengers will fork and improve.
 ## Expected repo layout
 
 ```text
-agent.js or agent.ts
+agent.js
 submission-report.md
 README.md
 ```
