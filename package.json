@@ -4,6 +4,9 @@
   "type": "module",
   "scripts": {
     "start": "node agent.js",
-    "test": "node test/agent.test.js"
+    "test": "node --test test/*.test.js",
+    "selfplay": "node test/selfplay.js",
+    "selfplay:validate": "node test/selfplay.js --games 20 --concurrency 4 --validate",
+    "selfplay:batch": "node test/selfplay.js --games 1000 --concurrency 20 --validate --json-out test-results/selfplay-batch.json --summary-json"
   }
 }

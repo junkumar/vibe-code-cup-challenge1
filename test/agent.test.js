@@ -1,16 +1,6 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const entryFiles = ['agent.js', 'agent.ts'].filter((file) => existsSync(join(root, file)));
-
-assert.equal(entryFiles.length, 1, 'Expected exactly one root entry file: agent.js or agent.ts');
-
-const agentPath = join(root, entryFiles[0]);
-const UCI_OR_NO_MOVE = /^(?:[a-h][1-8][a-h][1-8][qrbn]?|0000)$/;
+import test from 'node:test';
+import { runAgent } from './harness.js';
 
 const cases = [
   {
@@ -55,27 +45,32 @@ const cases = [
   },
 ];
 
-function runAgent(fen) {
-  const raw = execFileSync('node', [agentPath], {
-    input: `${fen}\n`,
-    encoding: 'utf8',
-    timeout: 1000,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-  const output = String(raw).trim();
-  assert.match(output, UCI_OR_NO_MOVE, `Agent printed malformed output: ${JSON.stringify(raw)}`);
-  return output;
-}
-
 for (const testCase of cases) {
-  const move = runAgent(testCase.fen);
-  if (testCase.legal.length === 0) {
-    assert.equal(move, '0000', `${testCase.name}: expected 0000 when no legal moves exist`);
-  } else {
-    assert.ok(testCase.legal.includes(move), `${testCase.name}: illegal move ${move}`);
-  }
+  test(testCase.name, () => {
+    const { output } = runAgent(testCase.fen);
+    if (testCase.legal.length === 0) {
+      assert.equal(output, '0000', `${testCase.name}: expected 0000 when no legal moves exist`);
+      return;
+    }
+    assert.ok(testCase.legal.includes(output), `${testCase.name}: illegal move ${output}`);
+  });
 }
 
-assert.equal(runAgent(cases[0].fen), runAgent(cases[0].fen), 'Agent must be deterministic for the same FEN');
+test('same FEN always yields the same move', () => {
+  assert.equal(runAgent(cases[0].fen).output, runAgent(cases[0].fen).output);
+});
 
-console.log('agent smoke tests ok');
+test('prefers a mate in one when available', () => {
+  const fen = '6k1/5Q2/6K1/8/8/8/8/8 w - - 0 1';
+  assert.equal(runAgent(fen).output, 'f7e8');
+});
+
+test('prefers a free queen capture over quiet moves', () => {
+  const fen = '4k3/8/8/8/8/8/4q3/3QK3 w - - 0 1';
+  assert.equal(runAgent(fen).output, 'e1e2');
+});
+
+test('prefers promotion to a queen in a winning promotion spot', () => {
+  const fen = '7k/6P1/6K1/8/8/8/8/8 w - - 0 1';
+  assert.equal(runAgent(fen).output, 'g7g8q');
+});
